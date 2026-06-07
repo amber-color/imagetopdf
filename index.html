@@ -1,0 +1,174 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Image to PDF Maker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<style>
+body{font-family:sans-serif;max-width:1100px;margin:auto;padding:20px;background:#f5f5f5}
+.card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+#drop{border:2px dashed #999;padding:30px;text-align:center;border-radius:12px;margin:10px 0}
+#thumbs{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.thumb{width:120px;border:1px solid #ccc;border-radius:8px;padding:5px;background:#fff}
+.thumb img{width:100%;height:90px;object-fit:cover}
+button{padding:10px 18px}
+progress{width:100%;height:25px}
+#log{height:180px;overflow:auto;background:#111;color:#0f0;padding:10px;font-family:monospace}
+@media(prefers-color-scheme:dark){
+body{background:#222;color:#eee}
+.card,.thumb{background:#333}
+}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>画像 → PDF 変換</h2>
+
+<input type="file" id="files" multiple accept="image/*"><br><br>
+
+<div id="drop">画像をドラッグ＆ドロップ</div>
+
+<div>画像数: <span id="count">0</span></div><br>
+
+<button id="btn">PDF作成</button>
+
+<h3>進捗</h3>
+<progress id="prog" value="0" max="100"></progress>
+<div id="status">待機中</div>
+
+<h3>サムネイル（ドラッグで並び替え）</h3>
+<div id="thumbs"></div>
+
+<h3>ログ</h3>
+<div id="log"></div>
+</div>
+
+<script>
+const filesData=[];
+
+function log(msg){
+ const d=new Date().toLocaleTimeString();
+ document.getElementById('log').innerHTML+=`[${d}] ${msg}<br>`;
+ document.getElementById('log').scrollTop=999999;
+}
+
+window.onerror=function(msg,url,line){
+ alert("エラー\\n"+msg+"\\nLine:"+line);
+};
+
+window.addEventListener("unhandledrejection",e=>{
+ alert("エラー\\n"+e.reason);
+});
+
+const thumbs=document.getElementById("thumbs");
+
+new Sortable(thumbs,{
+ animation:150,
+ onEnd(){
+   const arr=[...thumbs.children].map(x=>Number(x.dataset.idx));
+   const reordered=arr.map(i=>filesData[i]);
+   filesData.length=0;
+   reordered.forEach(x=>filesData.push(x));
+   renderThumbs();
+ }
+});
+
+function renderThumbs(){
+ thumbs.innerHTML="";
+ filesData.forEach((f,i)=>{
+   const d=document.createElement("div");
+   d.className="thumb";
+   d.dataset.idx=i;
+   d.innerHTML=`<img src="${f.url}"><div>${f.file.name}</div>`;
+   thumbs.appendChild(d);
+ });
+ document.getElementById("count").textContent=filesData.length;
+}
+
+async function addFiles(list){
+ for(const file of list){
+   const url=URL.createObjectURL(file);
+   filesData.push({file,url});
+   log("追加: "+file.name);
+ }
+ renderThumbs();
+}
+
+document.getElementById("files").onchange=e=>addFiles(e.target.files);
+
+drop.ondragover=e=>e.preventDefault();
+drop.ondrop=e=>{
+ e.preventDefault();
+ addFiles(e.dataTransfer.files);
+};
+
+function readFile(file){
+ return new Promise(r=>{
+   const fr=new FileReader();
+   fr.onload=e=>r(e.target.result);
+   fr.readAsDataURL(file);
+ });
+}
+
+function loadImg(src){
+ return new Promise(r=>{
+   const img=new Image();
+   img.onload=()=>r(img);
+   img.src=src;
+ });
+}
+
+async function compress(img){
+ const max=2000;
+ let w=img.width,h=img.height;
+ if(w>h && w>max){h*=max/w;w=max;}
+ if(h>w && h>max){w*=max/h;h=max;}
+ const c=document.createElement("canvas");
+ c.width=w;c.height=h;
+ c.getContext("2d").drawImage(img,0,0,w,h);
+ return c.toDataURL("image/jpeg",0.85);
+}
+
+document.getElementById("btn").onclick=async()=>{
+ if(!filesData.length){alert("画像を選択してください");return;}
+ const start=Date.now();
+ const btn=document.getElementById("btn");
+ btn.disabled=true;
+
+ const {jsPDF}=window.jspdf;
+ const pdf=new jsPDF({unit:"mm",format:"a4"});
+
+ for(let i=0;i<filesData.length;i++){
+   document.getElementById("status").textContent=`${i+1}/${filesData.length}`;
+   document.getElementById("prog").value=((i+1)/filesData.length)*100;
+
+   const data=await readFile(filesData[i].file);
+   const img=await loadImg(data);
+   const compressed=await compress(img);
+
+   const tmp=await loadImg(compressed);
+
+   if(i>0) pdf.addPage();
+
+   const pw=210,ph=297;
+   const ratio=Math.min(pw/tmp.width,ph/tmp.height);
+   const w=tmp.width*ratio;
+   const h=tmp.height*ratio;
+
+   pdf.addImage(compressed,"JPEG",(pw-w)/2,(ph-h)/2,w,h);
+   log("変換: "+filesData[i].file.name);
+ }
+
+ pdf.save("images.pdf");
+
+ const sec=((Date.now()-start)/1000).toFixed(1);
+ log("完了 "+sec+"秒");
+ document.getElementById("status").textContent="完了";
+ btn.disabled=false;
+};
+</script>
+</body>
+</html>
