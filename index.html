@@ -11,8 +11,9 @@ body{font-family:sans-serif;max-width:1100px;margin:auto;padding:20px;background
 .card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
 #drop{border:2px dashed #999;padding:30px;text-align:center;border-radius:12px;margin:10px 0}
 #thumbs{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
-.thumb{width:120px;border:1px solid #ccc;border-radius:8px;padding:5px;background:#fff}
-.thumb img{width:100%;height:90px;object-fit:cover}
+.thumb{width:120px;border:1px solid #ccc;border-radius:8px;padding:5px;background:#fff;display:flex;flex-direction:column}
+.thumb img{width:100%;object-fit:cover;flex:1}
+.thumb div{font-size:12px;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 button{padding:10px 18px}
 progress{width:100%;height:25px}
 #log{height:180px;overflow:auto;background:#111;color:#0f0;padding:10px;font-family:monospace}
@@ -89,12 +90,35 @@ new Sortable(thumbs,{
  }
 });
 
+function getPdfSettings(sizeOption){
+ const settings={
+   "a4p":{format:"a4",orientation:"portrait",width:210,height:297},
+   "a4l":{format:"a4",orientation:"landscape",width:297,height:210},
+   "a3p":{format:"a3",orientation:"portrait",width:297,height:420},
+   "a3l":{format:"a3",orientation:"landscape",width:420,height:297}
+ };
+ return settings[sizeOption];
+}
+
+function getThumbnailStyle(sizeOption){
+ const settings=getPdfSettings(sizeOption);
+ const aspectRatio=settings.width/settings.height;
+ let thumbWidth=120;
+ let thumbHeight=Math.round(thumbWidth/aspectRatio);
+ return {width:thumbWidth,height:thumbHeight};
+}
+
 function renderThumbs(){
  thumbs.innerHTML="";
+ const sizeOption=document.getElementById("pdfSize").value;
+ const thumbStyle=getThumbnailStyle(sizeOption);
+ 
  filesData.forEach((f,i)=>{
    const d=document.createElement("div");
    d.className="thumb";
    d.dataset.idx=i;
+   d.style.width=thumbStyle.width+"px";
+   d.style.height=thumbStyle.height+"px";
    d.innerHTML=`<img src="${f.url}"><div>${f.file.name}</div>`;
    thumbs.appendChild(d);
  });
@@ -117,6 +141,8 @@ drop.ondrop=e=>{
  e.preventDefault();
  addFiles(e.dataTransfer.files);
 };
+
+document.getElementById("pdfSize").onchange=()=>renderThumbs();
 
 function readFile(file){
  return new Promise(r=>{
@@ -143,16 +169,6 @@ async function compress(img){
  c.width=w;c.height=h;
  c.getContext("2d").drawImage(img,0,0,w,h);
  return c.toDataURL("image/jpeg",0.85);
-}
-
-function getPdfSettings(sizeOption){
- const settings={
-   "a4p":{format:"a4",orientation:"portrait",width:210,height:297},
-   "a4l":{format:"a4",orientation:"landscape",width:297,height:210},
-   "a3p":{format:"a3",orientation:"portrait",width:297,height:420},
-   "a3l":{format:"a3",orientation:"landscape",width:420,height:297}
- };
- return settings[sizeOption];
 }
 
 document.getElementById("btn").onclick=async()=>{
